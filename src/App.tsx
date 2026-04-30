@@ -12,7 +12,9 @@ import { PaneContextMenu } from "@/components/PaneContextMenu";
 import { RenameDialog } from "@/components/RenameDialog";
 import { ColorPickerDialog } from "@/components/ColorPickerDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
-import { loadState, saveState, newProjectId } from "@/store";
+import { loadState, saveState, newProjectId, newWorkspaceId } from "@/store";
+import { WorkspaceContextMenu } from "@/components/WorkspaceContextMenu";
+import { WorkspaceDialog } from "@/components/WorkspaceDialog";
 import {
   collectPaneIds,
   firstPaneId,
@@ -97,6 +99,12 @@ interface ProjectMenuState {
   y: number;
 }
 
+interface WorkspaceMenuState {
+  workspace: Workspace;
+  x: number;
+  y: number;
+}
+
 interface PaneMenuState {
   tabId: string;
   paneId: string;
@@ -139,9 +147,15 @@ export function App() {
   const [addOpen, setAddOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [projectMenu, setProjectMenu] = useState<ProjectMenuState | null>(null);
+  const [workspaceMenu, setWorkspaceMenu] = useState<WorkspaceMenuState | null>(
+    null,
+  );
   const [paneMenu, setPaneMenu] = useState<PaneMenuState | null>(null);
   const [renameTarget, setRenameTarget] = useState<Project | null>(null);
   const [colorTarget, setColorTarget] = useState<Project | null>(null);
+  const [workspaceDialog, setWorkspaceDialog] = useState<
+    { mode: "create" } | { mode: "rename"; workspace: Workspace } | null
+  >(null);
   const [sessionRestored, setSessionRestored] = useState(false);
 
   // paneId (= backend session_id) → tabId for fast routing of render/closed events.
@@ -813,11 +827,90 @@ export function App() {
     setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, color } : p)));
   };
 
-  const onReorderProjects = (oldIndex: number, newIndex: number) => {
-    setProjects((prev) => {
+  // ─── Workspace handlers ────────────────────────────────────────
+
+  const onAddWorkspace = (name: string) => {
+    const workspace: Workspace = {
+      id: newWorkspaceId(),
+      name,
+      order: workspaces.length,
+      collapsed: false,
+    };
+    setWorkspaces((prev) => [...prev, workspace]);
+  };
+
+  const onRenameWorkspace = (id: string, name: string) => {
+    setWorkspaces((prev) =>
+      prev.map((w) => (w.id === id ? { ...w, name } : w)),
+    );
+  };
+
+  const onDeleteWorkspace = (id: string) => {
+    setWorkspaces((prev) =>
+      prev.filter((w) => w.id !== id).map((w, idx) => ({ ...w, order: idx })),
+    );
+    setProjects((prev) =>
+      prev.map((p) => (p.workspaceId === id ? { ...p, workspaceId: null } : p)),
+    );
+  };
+
+  const onReorderWorkspaces = (oldIndex: number, newIndex: number) => {
+    setWorkspaces((prev) => {
       const sorted = [...prev].sort((a, b) => a.order - b.order);
       const reordered = arrayMove(sorted, oldIndex, newIndex);
-      return reordered.map((p, idx) => ({ ...p, order: idx }));
+      return reordered.map((w, idx) => ({ ...w, order: idx }));
+    });
+  };
+
+  const onToggleWorkspaceCollapsed = (id: string) => {
+    setWorkspaces((prev) =>
+      prev.map((w) => (w.id === id ? { ...w, collapsed: !w.collapsed } : w)),
+    );
+  };
+
+  const onMoveProject = (
+    projectId: string,
+    targetWorkspaceId: string | null,
+    insertBeforeProjectId: string | null,
+  ) => {
+    setProjects((prev) => {
+      const moving = prev.find((p) => p.id === projectId);
+      if (!moving) return prev;
+      // Remove from current group, recompute orders for the source group.
+      const others = prev.filter((p) => p.id !== projectId);
+      // Build the list of projects in the target workspace (without the moved one).
+      const inTarget = others
+        .filter((p) => (p.workspaceId ?? null) === targetWorkspaceId)
+        .sort((a, b) => a.order - b.order);
+      let insertIdx = inTarget.length;
+      if (insertBeforeProjectId) {
+        const idx = inTarget.findIndex((p) => p.id === insertBeforeProjectId);
+        if (idx >= 0) insertIdx = idx;
+      }
+      const updatedMoving: Project = {
+        ...moving,
+        workspaceId: targetWorkspaceId,
+      };
+      const newTarget = [
+        ...inTarget.slice(0, insertIdx),
+        updatedMoving,
+        ...inTarget.slice(insertIdx),
+      ].map((p, idx) => ({ ...p, order: idx }));
+      // Reassign order in the source group too.
+      const sourceWs = moving.workspaceId ?? null;
+      const newSource =
+        sourceWs === targetWorkspaceId
+          ? [] // already handled in newTarget
+          : others
+              .filter((p) => (p.workspaceId ?? null) === sourceWs)
+              .sort((a, b) => a.order - b.order)
+              .map((p, idx) => ({ ...p, order: idx }));
+      // Other groups remain untouched.
+      const untouched = others.filter((p) => {
+        const ws = p.workspaceId ?? null;
+        return ws !== targetWorkspaceId && ws !== sourceWs;
+      });
+      return [...untouched, ...newSource, ...newTarget];
     });
   };
 
@@ -867,11 +960,20 @@ export function App() {
     <div className="flex h-screen w-screen bg-zinc-950 text-zinc-100">
       <Sidepanel
         projects={projects}
+        workspaces={workspaces}
         activeProjectId={activeProjectId}
         onActivate={setActiveProjectId}
         onAdd={() => setAddOpen(true)}
-        onContextMenu={(project, x, y) => setProjectMenu({ project, x, y })}
-        onReorder={onReorderProjects}
+        onAddWorkspace={() => setWorkspaceDialog({ mode: "create" })}
+        onProjectContextMenu={(project, x, y) =>
+          setProjectMenu({ project, x, y })
+        }
+        onWorkspaceContextMenu={(workspace, x, y) =>
+          setWorkspaceMenu({ workspace, x, y })
+        }
+        onMoveProject={onMoveProject}
+        onReorderWorkspaces={onReorderWorkspaces}
+        onToggleWorkspaceCollapsed={onToggleWorkspaceCollapsed}
         tabs={tabs}
         paneAgentStates={paneAgentStates}
       />
@@ -948,6 +1050,8 @@ export function App() {
         <ProjectContextMenu
           x={projectMenu.x}
           y={projectMenu.y}
+          workspaces={workspaces}
+          currentWorkspaceId={projectMenu.project.workspaceId}
           onRename={() => setRenameTarget(projectMenu.project)}
           onChangeColor={() => setColorTarget(projectMenu.project)}
           onDelete={() => {
@@ -956,9 +1060,60 @@ export function App() {
               onDeleteProject(proj.id);
             }
           }}
+          onMoveToWorkspace={(workspaceId) =>
+            onMoveProject(projectMenu.project.id, workspaceId, null)
+          }
           onClose={() => setProjectMenu(null)}
         />
       )}
+
+      {workspaceMenu && (
+        <WorkspaceContextMenu
+          x={workspaceMenu.x}
+          y={workspaceMenu.y}
+          onRename={() =>
+            setWorkspaceDialog({
+              mode: "rename",
+              workspace: workspaceMenu.workspace,
+            })
+          }
+          onDelete={() => {
+            const ws = workspaceMenu.workspace;
+            if (
+              confirm(
+                `Delete workspace "${ws.name}"? Its projects will become ungrouped.`,
+              )
+            ) {
+              onDeleteWorkspace(ws.id);
+            }
+          }}
+          onClose={() => setWorkspaceMenu(null)}
+        />
+      )}
+
+      <WorkspaceDialog
+        open={!!workspaceDialog}
+        title={
+          workspaceDialog?.mode === "rename"
+            ? "Rename workspace"
+            : "New workspace"
+        }
+        initialValue={
+          workspaceDialog?.mode === "rename"
+            ? workspaceDialog.workspace.name
+            : ""
+        }
+        onCancel={() => setWorkspaceDialog(null)}
+        onSubmit={(name) => {
+          if (!workspaceDialog) return;
+          if (workspaceDialog.mode === "create") {
+            onAddWorkspace(name);
+          } else {
+            onRenameWorkspace(workspaceDialog.workspace.id, name);
+          }
+          setWorkspaceDialog(null);
+        }}
+      />
 
       {paneMenu && (
         <PaneContextMenu
