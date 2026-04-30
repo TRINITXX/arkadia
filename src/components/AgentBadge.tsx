@@ -13,7 +13,7 @@ export function AgentBadge({
 }: AgentBadgeProps) {
   if (state.kind === "none" || state.kind === "idle") return null;
   const cls =
-    state.kind === "busy" ? "bg-amber-500 animate-pulse" : "bg-cyan-500";
+    state.kind === "busy" ? "bg-amber-500 animate-pulse" : "bg-emerald-500";
   const tooltip =
     state.kind === "busy"
       ? state.tool

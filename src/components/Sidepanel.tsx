@@ -158,7 +158,7 @@ function SortableProjectRow({
           {shortenPath(project.path)}
         </div>
       </div>
-      <span className="mt-1.5 shrink-0">
+      <span className="self-center shrink-0">
         <AgentBadge state={agentState} size={8} inline />
       </span>
     </div>

@@ -16,9 +16,6 @@ import { Minus, Square, X } from "lucide-react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { UnlistenFn } from "@tauri-apps/api/event";
 import type { Tab } from "@/types";
-import type { AgentStateValue } from "@/lib/agentState";
-import { aggregate } from "@/lib/agentState";
-import { AgentBadge } from "./AgentBadge";
 
 interface TabBarProps {
   tabs: Tab[];
@@ -29,18 +26,6 @@ interface TabBarProps {
   onSpawn: () => void;
   onReorder: (oldIndex: number, newIndex: number) => void;
   disabled?: boolean;
-  paneAgentStates: Record<string, AgentStateValue>;
-}
-
-function tabAgentState(
-  tab: Tab,
-  paneAgentStates: Record<string, AgentStateValue>,
-): AgentStateValue {
-  const states: AgentStateValue[] = [];
-  for (const paneId of Object.keys(tab.panes)) {
-    states.push(paneAgentStates[paneId] ?? { kind: "none" });
-  }
-  return aggregate(states);
 }
 
 export function TabBar({
@@ -52,7 +37,6 @@ export function TabBar({
   onSpawn,
   onReorder,
   disabled = false,
-  paneAgentStates,
 }: TabBarProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -91,7 +75,6 @@ export function TabBar({
                 hasBell={!!bellTabs[tab.id] && tab.id !== activeTabId}
                 onActivate={onActivate}
                 onClose={onClose}
-                paneAgentStates={paneAgentStates}
               />
             ))}
           </SortableContext>
@@ -203,7 +186,6 @@ interface SortableTabProps {
   hasBell: boolean;
   onActivate: (id: string) => void;
   onClose: (id: string) => void;
-  paneAgentStates: Record<string, AgentStateValue>;
 }
 
 function SortableTab({
@@ -212,7 +194,6 @@ function SortableTab({
   hasBell,
   onActivate,
   onClose,
-  paneAgentStates,
 }: SortableTabProps) {
   const {
     attributes,
@@ -259,7 +240,6 @@ function SortableTab({
       )}
       <span className="relative inline-block truncate font-medium">
         {title}
-        <AgentBadge state={tabAgentState(tab, paneAgentStates)} size={6} />
       </span>
     </div>
   );

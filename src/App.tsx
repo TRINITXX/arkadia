@@ -146,6 +146,15 @@ export function App() {
   // paneId (= backend session_id) → tabId for fast routing of render/closed events.
   const paneToTab = useRef<Map<string, string>>(new Map());
 
+  // Holds the latest buildSession closure so the close handler (registered once)
+  // always sees up-to-date state without retriggering on every state change.
+  const buildSessionRef = useRef<() => SessionFile>(() => ({
+    version: 1,
+    saved_at: new Date().toISOString(),
+    active_project_id: null,
+    projects: [],
+  }));
+
   const activeProject = useMemo(
     () => projects.find((p) => p.id === activeProjectId) ?? null,
     [projects, activeProjectId],
@@ -651,74 +660,62 @@ export function App() {
 
   // ─── Session auto-save (debounced + close + 30s safety net) ────
 
+  // Build the current SessionFile from React state. Memoised so the close
+  // handler can read the latest version through buildSessionRef.
+  const buildSession = useCallback((): SessionFile => {
+    const agentResumes: Record<string, AgentResume> = {};
+    for (const [paneId, st] of Object.entries(paneAgentStates)) {
+      if (st.kind === "idle" || st.kind === "waiting") {
+        agentResumes[paneId] = {
+          kind: "claude-code",
+          session_id: st.session_id,
+          command: "ccd --resume",
+        };
+      }
+    }
+    return {
+      version: 1,
+      saved_at: new Date().toISOString(),
+      active_project_id: activeProjectId,
+      projects: projects.map((p) => ({
+        project_id: p.id,
+        active_tab_id: activeTabIdByProject[p.id] ?? null,
+        tabs: tabs
+          .filter((t) => t.projectId === p.id)
+          .map<TabSession>((t) => ({
+            tab_id: t.id,
+            title: t.panes[t.activePaneId]?.title ?? "",
+            active_pane_id: t.activePaneId,
+            pane_tree: serializeTree(t.tree, t.panes, agentResumes),
+          })),
+      })),
+    };
+  }, [projects, tabs, activeProjectId, activeTabIdByProject, paneAgentStates]);
+
+  useEffect(() => {
+    buildSessionRef.current = buildSession;
+  }, [buildSession]);
+
+  // Effect A: debounced save + 30s safety net. Reruns on state change but
+  // does NOT touch onCloseRequested.
   useEffect(() => {
     if (!loaded || !sessionRestored) return;
-
-    // Build the current SessionFile from React state. Inlined as a closure
-    // so it always sees the latest values via the dep array.
-    const buildSession = (): SessionFile => {
-      const agentResumes: Record<string, AgentResume> = {};
-      for (const [paneId, st] of Object.entries(paneAgentStates)) {
-        if (st.kind === "idle" || st.kind === "waiting") {
-          agentResumes[paneId] = {
-            kind: "claude-code",
-            session_id: st.session_id,
-            command: "ccd --resume",
-          };
-        }
-      }
-      return {
-        version: 1,
-        saved_at: new Date().toISOString(),
-        active_project_id: activeProjectId,
-        projects: projects.map((p) => ({
-          project_id: p.id,
-          active_tab_id: activeTabIdByProject[p.id] ?? null,
-          tabs: tabs
-            .filter((t) => t.projectId === p.id)
-            .map<TabSession>((t) => ({
-              tab_id: t.id,
-              title: t.panes[t.activePaneId]?.title ?? "",
-              active_pane_id: t.activePaneId,
-              pane_tree: serializeTree(t.tree, t.panes, agentResumes),
-            })),
-        })),
-      };
-    };
-
     const doSave = async () => {
       try {
-        await invoke("session_save", { session: buildSession() });
+        await invoke("session_save", { session: buildSessionRef.current() });
       } catch (e) {
         console.warn("session_save failed", e);
       }
     };
-
-    // 1) Debounced save on state change.
     const debounce = window.setTimeout(() => {
       void doSave();
     }, 1500);
-
-    // 2) Periodic safety-net save (long-running sessions where nothing changed).
     const interval = window.setInterval(() => {
       void doSave();
     }, 30_000);
-
-    // 3) Save on Tauri window close. The handler is async; await ensures the
-    //    file is fully written before the window proceeds with shutdown.
-    let unlistenClose: (() => void) | undefined;
-    void getCurrentWindow()
-      .onCloseRequested(async () => {
-        await doSave();
-      })
-      .then((un) => {
-        unlistenClose = un;
-      });
-
     return () => {
       window.clearTimeout(debounce);
       window.clearInterval(interval);
-      unlistenClose?.();
     };
   }, [
     loaded,
@@ -729,6 +726,37 @@ export function App() {
     activeTabIdByProject,
     paneAgentStates,
   ]);
+
+  // Effect B: register the close handler EXACTLY once after session restore.
+  // Uses buildSessionRef so we always serialise the latest state. The
+  // `cancelled` flag handles the case where cleanup runs before the
+  // onCloseRequested promise resolves.
+  useEffect(() => {
+    if (!loaded || !sessionRestored) return;
+    let cancelled = false;
+    let unlistenClose: (() => void) | undefined;
+    void getCurrentWindow()
+      .onCloseRequested(async () => {
+        try {
+          await invoke("session_save", {
+            session: buildSessionRef.current(),
+          });
+        } catch (e) {
+          console.warn("session_save on close failed", e);
+        }
+      })
+      .then((un) => {
+        if (cancelled) {
+          un();
+        } else {
+          unlistenClose = un;
+        }
+      });
+    return () => {
+      cancelled = true;
+      unlistenClose?.();
+    };
+  }, [loaded, sessionRestored]);
 
   // Ctrl+T new tab
   useEffect(() => {
@@ -880,7 +908,6 @@ export function App() {
           onSpawn={() => activeProject && spawnTabFor(activeProject)}
           onReorder={onReorderTabs}
           disabled={!activeProject}
-          paneAgentStates={paneAgentStates}
         />
 
         <Toolbar
