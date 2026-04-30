@@ -25,16 +25,33 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' ipc: http://ipc.localhost; font-src 'self' data:"
     }
   },
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "TRINITX",
+    "copyright": "Copyright (c) 2026 TRINITX",
+    "category": "DeveloperTool",
+    "shortDescription": "A WezTerm-inspired terminal with workspace and pane management",
+    "longDescription": "Arkadia is a fast, GPU-accelerated terminal built on Tauri 2 and a custom Rust/WebGPU renderer. It features split panes, tabbed workspaces, drag-and-drop project organization, and persistent sessions.",
+    "homepage": "https://github.com/TRINITXX/arkadia",
     "icon": [
       "icons/32x32.png",
+      "icons/64x64.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
+      "icons/Square30x30Logo.png",
+      "icons/Square44x44Logo.png",
+      "icons/Square71x71Logo.png",
+      "icons/Square89x89Logo.png",
+      "icons/Square107x107Logo.png",
+      "icons/Square142x142Logo.png",
+      "icons/Square150x150Logo.png",
+      "icons/Square284x284Logo.png",
+      "icons/Square310x310Logo.png",
+      "icons/StoreLogo.png",
       "icons/icon.icns",
       "icons/icon.ico"
     ]

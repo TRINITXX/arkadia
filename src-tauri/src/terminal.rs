@@ -20,6 +20,15 @@ use crate::terminal_state::{
 
 const FRAME_INTERVAL: Duration = Duration::from_millis(16);
 
+/// Refuse PTY writes larger than this — protects against runaway frontend code
+/// (paste loops, fuzzed input) flooding the writer thread.
+const MAX_INPUT_BYTES: usize = 65_536;
+
+/// Clamp cols/rows on resize and mouse coords. 1000×1000 is far beyond any
+/// realistic terminal size and prevents the PTY from being asked to allocate
+/// absurd buffers if the renderer reports a bogus dimension.
+const MAX_TERM_DIM: u16 = 1000;
+
 type SharedWriter = Arc<Mutex<Box<dyn Write + Send>>>;
 type SharedTerm = Arc<Mutex<TerminalState>>;
 
@@ -606,6 +615,13 @@ pub fn send_input(
     bytes: Vec<u8>,
     state: State<'_, SessionMap>,
 ) -> Result<(), String> {
+    if bytes.len() > MAX_INPUT_BYTES {
+        return Err(format!(
+            "input too large: {} bytes (max {})",
+            bytes.len(),
+            MAX_INPUT_BYTES
+        ));
+    }
     let sessions = state.sessions.lock();
     let session = sessions
         .get(&session_id)
@@ -625,6 +641,8 @@ pub fn resize_terminal(
     rows: u16,
     state: State<'_, SessionMap>,
 ) -> Result<(), String> {
+    let cols = cols.clamp(1, MAX_TERM_DIM);
+    let rows = rows.clamp(1, MAX_TERM_DIM);
     let sessions = state.sessions.lock();
     let session = sessions
         .get(&session_id)
@@ -706,6 +724,8 @@ pub fn send_mouse_event(
     pressed: bool,
     state: State<'_, SessionMap>,
 ) -> Result<(), String> {
+    let col = col.min(MAX_TERM_DIM);
+    let row = row.min(MAX_TERM_DIM);
     let sessions = state.sessions.lock();
     let session = sessions
         .get(&session_id)

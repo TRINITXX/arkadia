@@ -10,7 +10,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["TRINITX"]
 license = "MIT"
-repository = ""
+repository = "https://github.com/TRINITXX/arkadia"
 
 [profile.release]
 codegen-units = 1

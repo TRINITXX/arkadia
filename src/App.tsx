@@ -668,11 +668,12 @@ export function App() {
 
   // Cleanup all sessions on unmount (HMR / app close)
   useEffect(() => {
+    const map = paneToTab.current;
     return () => {
-      paneToTab.current.forEach((_tabId, paneId) => {
+      map.forEach((_tabId, paneId) => {
         void invoke("close_terminal", { sessionId: paneId });
       });
-      paneToTab.current.clear();
+      map.clear();
     };
   }, []);
 
@@ -998,8 +999,16 @@ export function App() {
         />
 
         {error && (
-          <div className="mx-4 mt-2 rounded border border-red-800 bg-red-950/50 px-3 py-2 text-sm text-red-300">
-            {error}
+          <div className="mx-4 mt-2 flex items-start gap-3 rounded border border-red-800 bg-red-950/50 px-3 py-2 text-sm text-red-300">
+            <span className="flex-1 break-words">{error}</span>
+            <button
+              type="button"
+              aria-label="Dismiss error"
+              onClick={() => setError(null)}
+              className="-mr-1 rounded px-1.5 py-0.5 text-red-400 transition-colors hover:bg-red-900/40 hover:text-red-200"
+            >
+              ×
+            </button>
           </div>
         )}
 

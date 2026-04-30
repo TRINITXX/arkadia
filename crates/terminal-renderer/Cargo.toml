@@ -5,6 +5,11 @@ edition.workspace = true
 authors.workspace = true
 license.workspace = true
 
+# wasm-opt bundled with wasm-pack rejects bulk-memory ops emitted by recent
+# rustc/wasm-bindgen. Disable until wasm-pack ships a newer binaryen.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 

@@ -569,6 +569,7 @@ export function TerminalWebGPU({
     if (!readyRef.current || !r) return;
     r.set_palette(paletteToWasm(palette));
     redraw();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [palette]);
 
   // ─── 3. Font size change ───────────────────────────────────────
@@ -580,6 +581,7 @@ export function TerminalWebGPU({
     const cell = measureCellSize(font.family, font.size);
     r.set_cell_size(cell.width * dpr, cell.height * dpr);
     redraw();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [font.family, font.size]);
 
   // ─── 3b. Font family swap (load system font into the GPU atlas) ──
@@ -630,6 +632,7 @@ export function TerminalWebGPU({
   useEffect(() => {
     if (!pane.screen) return;
     redraw();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pane.screen]);
 
   // ─── 5. Resize: update canvas pixels + PTY cols/rows ───────────
@@ -686,6 +689,7 @@ export function TerminalWebGPU({
       observer.disconnect();
       if (timer) clearTimeout(timer);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pane.id, font.family, font.size]);
 
   // ─── 6. Focus ─────────────────────────────────────────────────
@@ -1093,6 +1097,7 @@ export function TerminalWebGPU({
       window.removeEventListener("mousemove", onMove);
       outer.style.cursor = "";
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

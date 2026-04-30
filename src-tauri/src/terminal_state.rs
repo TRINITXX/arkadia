@@ -20,7 +20,7 @@ use termwiz::escape::parser::Parser;
 use termwiz::escape::{Action, ControlCode, Esc, EscCode, OperatingSystemCommand};
 use unicode_width::UnicodeWidthChar;
 
-pub const SCROLLBACK_CAP: usize = 10_000;
+pub const SCROLLBACK_CAP: usize = 100_000;
 
 /// Underline rendering style. Wire format: 0 = none, 1 = single, 2 = double,
 /// 3 = curly, 4 = dotted, 5 = dashed. Maps to termwiz's `Underline` enum.
