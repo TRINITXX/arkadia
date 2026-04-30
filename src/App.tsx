@@ -41,6 +41,7 @@ import {
   type Tab,
   type TerminalFont,
   type ToolbarButton,
+  type Workspace,
 } from "@/types";
 import type {
   AgentResume,
@@ -106,6 +107,7 @@ interface PaneMenuState {
 export function App() {
   const [loaded, setLoaded] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [toolbarButtons, setToolbarButtons] = useState<ToolbarButton[]>([]);
   const [font, setFont] = useState<TerminalFont>(DEFAULT_TERMINAL_FONT);
@@ -178,6 +180,7 @@ export function App() {
       .then((state) => {
         if (cancelled) return;
         setProjects(state.projects);
+        setWorkspaces(state.workspaces);
         setActiveProjectId(state.activeProjectId);
         setToolbarButtons(state.toolbarButtons);
         setFont(state.font);
@@ -202,6 +205,7 @@ export function App() {
     const t = setTimeout(() => {
       void saveState({
         projects,
+        workspaces,
         activeProjectId,
         toolbarButtons,
         font,
@@ -215,6 +219,7 @@ export function App() {
   }, [
     loaded,
     projects,
+    workspaces,
     activeProjectId,
     toolbarButtons,
     font,

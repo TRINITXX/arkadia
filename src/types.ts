@@ -81,6 +81,16 @@ export interface Project {
   path: string;
   color: string;
   order: number;
+  /** null/undefined = ungrouped (rendered in the implicit "Ungrouped" section). */
+  workspaceId?: string | null;
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  icon?: string;
+  order: number;
+  collapsed: boolean;
 }
 
 /** Pane id == backend session_id (1:1). Renamed for sematic clarity in the tree. */

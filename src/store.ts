@@ -11,12 +11,14 @@ import {
   type Project,
   type TerminalFont,
   type ToolbarButton,
+  type Workspace,
 } from "@/types";
 
 const STORE_FILE = "store.json";
 const LEGACY_LOCAL_STORAGE_KEY = "arkadia.v1";
 
 const KEY_PROJECTS = "projects";
+const KEY_WORKSPACES = "workspaces";
 const KEY_ACTIVE_PROJECT = "activeProjectId";
 const KEY_TOOLBAR_BUTTONS = "toolbarButtons";
 const KEY_FONT = "font";
@@ -45,6 +47,7 @@ const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
 
 export interface PersistedState {
   projects: Project[];
+  workspaces: Workspace[];
   activeProjectId: string | null;
   toolbarButtons: ToolbarButton[];
   font: TerminalFont;
@@ -56,6 +59,7 @@ export interface PersistedState {
 
 const DEFAULT_STATE: PersistedState = {
   projects: [],
+  workspaces: [],
   activeProjectId: null,
   toolbarButtons: [],
   font: DEFAULT_TERMINAL_FONT,
@@ -136,6 +140,34 @@ function normalizeEditorProtocol(p: unknown): EditorProtocol {
   return DEFAULT_EDITOR_PROTOCOL;
 }
 
+function normalizeProject(p: unknown): Project | null {
+  const x = (p ?? {}) as Record<string, unknown>;
+  if (typeof x.id !== "string" || typeof x.name !== "string") return null;
+  return {
+    id: x.id,
+    name: x.name,
+    path: typeof x.path === "string" ? x.path : "",
+    color: typeof x.color === "string" ? x.color : PROJECT_COLORS[0],
+    order: typeof x.order === "number" ? x.order : 0,
+    workspaceId:
+      typeof x.workspaceId === "string" && x.workspaceId.length > 0
+        ? x.workspaceId
+        : null,
+  };
+}
+
+function normalizeWorkspace(w: unknown): Workspace | null {
+  const x = (w ?? {}) as Record<string, unknown>;
+  if (typeof x.id !== "string" || typeof x.name !== "string") return null;
+  return {
+    id: x.id,
+    name: x.name,
+    icon: typeof x.icon === "string" ? x.icon : undefined,
+    order: typeof x.order === "number" ? x.order : 0,
+    collapsed: typeof x.collapsed === "boolean" ? x.collapsed : false,
+  };
+}
+
 function normalizeButton(b: unknown): ToolbarButton {
   const x = (b ?? {}) as Record<string, unknown>;
   if (x.kind === "folder") {
@@ -161,7 +193,10 @@ async function tryMigrateFromLocalStorage(
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<PersistedState>;
     const state: PersistedState = {
-      projects: Array.isArray(parsed.projects) ? parsed.projects : [],
+      projects: Array.isArray(parsed.projects)
+        ? (parsed.projects.map(normalizeProject).filter(Boolean) as Project[])
+        : [],
+      workspaces: [],
       activeProjectId: parsed.activeProjectId ?? null,
       toolbarButtons: Array.isArray(parsed.toolbarButtons)
         ? parsed.toolbarButtons.map(normalizeButton)
@@ -173,6 +208,7 @@ async function tryMigrateFromLocalStorage(
       editorProtocol: DEFAULT_EDITOR_PROTOCOL,
     };
     await store.set(KEY_PROJECTS, state.projects);
+    await store.set(KEY_WORKSPACES, state.workspaces);
     await store.set(KEY_ACTIVE_PROJECT, state.activeProjectId);
     await store.set(KEY_TOOLBAR_BUTTONS, state.toolbarButtons);
     await store.set(KEY_FONT, state.font);
@@ -197,8 +233,8 @@ export async function loadState(): Promise<PersistedState> {
     if (migrated) return migrated;
   }
 
-  const projects =
-    (await store.get<Project[]>(KEY_PROJECTS)) ?? DEFAULT_STATE.projects;
+  const rawProjects = (await store.get<unknown[]>(KEY_PROJECTS)) ?? [];
+  const rawWorkspaces = (await store.get<unknown[]>(KEY_WORKSPACES)) ?? [];
   const activeProjectId =
     (await store.get<string | null>(KEY_ACTIVE_PROJECT)) ??
     DEFAULT_STATE.activeProjectId;
@@ -210,7 +246,12 @@ export async function loadState(): Promise<PersistedState> {
   const rawEditorProtocol = await store.get<unknown>(KEY_EDITOR_PROTOCOL);
 
   return {
-    projects: Array.isArray(projects) ? projects : DEFAULT_STATE.projects,
+    projects: Array.isArray(rawProjects)
+      ? (rawProjects.map(normalizeProject).filter(Boolean) as Project[])
+      : DEFAULT_STATE.projects,
+    workspaces: Array.isArray(rawWorkspaces)
+      ? (rawWorkspaces.map(normalizeWorkspace).filter(Boolean) as Workspace[])
+      : DEFAULT_STATE.workspaces,
     activeProjectId,
     toolbarButtons: Array.isArray(rawButtons)
       ? rawButtons.map(normalizeButton)
@@ -229,6 +270,7 @@ export async function loadState(): Promise<PersistedState> {
 export async function saveState(state: PersistedState): Promise<void> {
   const store = await getStore();
   await store.set(KEY_PROJECTS, state.projects);
+  await store.set(KEY_WORKSPACES, state.workspaces);
   await store.set(KEY_ACTIVE_PROJECT, state.activeProjectId);
   await store.set(KEY_TOOLBAR_BUTTONS, state.toolbarButtons);
   await store.set(KEY_FONT, state.font);
@@ -241,6 +283,10 @@ export async function saveState(state: PersistedState): Promise<void> {
 
 export function newProjectId() {
   return `proj-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function newWorkspaceId() {
+  return `ws-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 export function newButtonId() {
