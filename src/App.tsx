@@ -658,6 +658,7 @@ export function App() {
           onSpawn={() => activeProject && spawnTabFor(activeProject)}
           onReorder={onReorderTabs}
           disabled={!activeProject}
+          paneAgentStates={paneAgentStates}
         />
 
         <Toolbar
