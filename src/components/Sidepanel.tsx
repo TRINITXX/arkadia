@@ -139,7 +139,7 @@ function SortableProjectRow({
   return (
     <div
       ref={setNodeRef}
-      style={style}
+      style={{ ...style, borderLeftColor: project.color }}
       {...attributes}
       {...listeners}
       onClick={() => onActivate(project.id)}
@@ -147,24 +147,20 @@ function SortableProjectRow({
         e.preventDefault();
         onContextMenu(project, e.clientX, e.clientY);
       }}
-      className={`group mx-1.5 mb-0.5 flex cursor-pointer items-start gap-2 rounded px-2 py-1.5 ${
+      className={`group mx-1.5 mb-0.5 flex cursor-pointer items-start gap-2 border-l-[3px] rounded py-1.5 pl-2 pr-2 ${
         active ? "bg-zinc-800 text-zinc-100" : "text-zinc-300 hover:bg-zinc-900"
       }`}
       title={project.path}
     >
-      <span className="relative mt-1.5 size-2.5 shrink-0">
-        <span
-          className="block size-full rounded-full"
-          style={{ backgroundColor: project.color }}
-        />
-        <AgentBadge state={agentState} size={8} />
-      </span>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm">{project.name}</div>
         <div className="truncate font-mono text-[10px] text-zinc-500">
           {shortenPath(project.path)}
         </div>
       </div>
+      <span className="mt-1.5 shrink-0">
+        <AgentBadge state={agentState} size={8} inline />
+      </span>
     </div>
   );
 }

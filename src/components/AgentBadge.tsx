@@ -3,9 +3,14 @@ import type { AgentStateValue } from "@/lib/agentState";
 interface AgentBadgeProps {
   state: AgentStateValue;
   size?: number;
+  inline?: boolean;
 }
 
-export function AgentBadge({ state, size = 8 }: AgentBadgeProps) {
+export function AgentBadge({
+  state,
+  size = 8,
+  inline = false,
+}: AgentBadgeProps) {
   if (state.kind === "none" || state.kind === "idle") return null;
   const cls =
     state.kind === "busy" ? "bg-amber-500 animate-pulse" : "bg-cyan-500";
@@ -15,10 +20,11 @@ export function AgentBadge({ state, size = 8 }: AgentBadgeProps) {
         ? `Claude bosse: ${state.tool}…`
         : "Claude bosse…"
       : "Claude attend une réponse";
+  const positionCls = inline ? "inline-block" : "absolute -top-0.5 -right-0.5";
   return (
     <span
       title={tooltip}
-      className={`absolute -top-0.5 -right-0.5 rounded-full ring-1 ring-zinc-900/50 ${cls}`}
+      className={`${positionCls} rounded-full ring-1 ring-zinc-900/50 ${cls}`}
       style={{ width: size, height: size }}
     />
   );
