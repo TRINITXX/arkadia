@@ -13,7 +13,6 @@
     "store:default",
     "dialog:default",
     "dialog:allow-open",
-    "window-state:default",
     "clipboard-manager:allow-write-text",
     "clipboard-manager:allow-read-text",
     {
