@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import { getCurrentWindow } from "@tauri-apps/api/window";
 import { arrayMove } from "@dnd-kit/sortable";
 import { TabBar } from "@/components/TabBar";
 import { Sidepanel } from "@/components/Sidepanel";
@@ -727,36 +726,10 @@ export function App() {
     paneAgentStates,
   ]);
 
-  // Effect B: register the close handler EXACTLY once after session restore.
-  // Uses buildSessionRef so we always serialise the latest state. The
-  // `cancelled` flag handles the case where cleanup runs before the
-  // onCloseRequested promise resolves.
-  useEffect(() => {
-    if (!loaded || !sessionRestored) return;
-    let cancelled = false;
-    let unlistenClose: (() => void) | undefined;
-    void getCurrentWindow()
-      .onCloseRequested(async () => {
-        try {
-          await invoke("session_save", {
-            session: buildSessionRef.current(),
-          });
-        } catch (e) {
-          console.warn("session_save on close failed", e);
-        }
-      })
-      .then((un) => {
-        if (cancelled) {
-          un();
-        } else {
-          unlistenClose = un;
-        }
-      });
-    return () => {
-      cancelled = true;
-      unlistenClose?.();
-    };
-  }, [loaded, sessionRestored]);
+  // No onCloseRequested handler: it caused the window to hang when invoke
+  // ran during runtime teardown. The debounced save (Effect A, 1.5s) keeps
+  // the on-disk state fresh enough; trading the last ~1.5s of changes for
+  // a reliable close is the right tradeoff.
 
   // Ctrl+T new tab
   useEffect(() => {
