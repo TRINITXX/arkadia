@@ -15,9 +15,11 @@ export function isActive(s: AgentStateValue): boolean {
 }
 
 export function aggregate(states: AgentStateValue[]): AgentStateValue {
+  // waiting outranks busy because it requires user action (AskUserQuestion,
+  // ExitPlanMode) — it must be surfaced even when other agents are working.
   const order: Record<AgentStateValue["kind"], number> = {
-    busy: 4,
-    waiting: 3,
+    waiting: 4,
+    busy: 3,
     idle: 2,
     none: 1,
   };
