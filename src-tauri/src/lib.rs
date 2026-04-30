@@ -1,4 +1,7 @@
+mod agent_registry;
+mod claude_watcher;
 mod fonts;
+mod session;
 mod terminal;
 mod terminal_state;
 

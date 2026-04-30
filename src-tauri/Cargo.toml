@@ -27,3 +27,8 @@ termwiz = "0.23"
 tauri-plugin-window-state = "2.4.1"
 unicode-width = "0.2"
 font-kit = "0.14"
+notify = "6"
+tokio = { version = "1", features = ["fs", "sync", "rt", "rt-multi-thread", "macros", "time"] }
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5"
+tauri-plugin-notification = "2"
