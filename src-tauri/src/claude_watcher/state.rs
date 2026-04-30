@@ -13,6 +13,7 @@ pub enum AgentState {
 const WAITING_TO_IDLE: Duration = Duration::from_secs(60);
 const STREAMING_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 const TOOL_BUSY_TIMEOUT: Duration = Duration::from_secs(30);
+const CONTINUING_BUSY_TIMEOUT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone)]
 pub struct StateMachine {
@@ -39,6 +40,7 @@ impl StateMachine {
             Entry::User => AgentState::Busy { tool: None },
             Entry::ToolUse { name } => AgentState::Busy { tool: Some(name) },
             Entry::AssistantPartial => AgentState::Busy { tool: None },
+            Entry::AssistantContinuing => AgentState::Busy { tool: None },
             Entry::AssistantComplete => AgentState::Waiting {
                 session_id: self.session_id.clone(),
             },
@@ -59,6 +61,13 @@ impl StateMachine {
             }
             (AgentState::Busy { .. }, Some(Entry::ToolUse { .. }))
                 if elapsed > TOOL_BUSY_TIMEOUT =>
+            {
+                self.current = AgentState::Waiting {
+                    session_id: self.session_id.clone(),
+                };
+            }
+            (AgentState::Busy { .. }, Some(Entry::AssistantContinuing))
+                if elapsed > CONTINUING_BUSY_TIMEOUT =>
             {
                 self.current = AgentState::Waiting {
                     session_id: self.session_id.clone(),
@@ -161,5 +170,35 @@ mod tests {
         sm.observe(Entry::User, t0());
         let s = sm.observe(Entry::ToolResult, t0());
         assert!(matches!(s, AgentState::Busy { .. }));
+    }
+
+    #[test]
+    fn assistant_continuing_stays_busy() {
+        let mut sm = StateMachine::new("sess1".into(), t0());
+        sm.observe(Entry::User, t0());
+        let s = sm.observe(Entry::AssistantContinuing, t0());
+        assert!(matches!(s, AgentState::Busy { tool: None }));
+    }
+
+    #[test]
+    fn tool_use_after_continuing_keeps_busy() {
+        let mut sm = StateMachine::new("sess1".into(), t0());
+        sm.observe(Entry::AssistantContinuing, t0());
+        let s = sm.observe(
+            Entry::ToolUse {
+                name: "Read".into(),
+            },
+            t0(),
+        );
+        assert!(matches!(s, AgentState::Busy { tool: Some(n) } if n == "Read"));
+    }
+
+    #[test]
+    fn continuing_falls_to_waiting_after_60s() {
+        let start = t0();
+        let mut sm = StateMachine::new("sess1".into(), start);
+        sm.observe(Entry::AssistantContinuing, start);
+        let s = sm.tick(start + Duration::from_secs(61));
+        assert!(matches!(s, AgentState::Waiting { .. }));
     }
 }

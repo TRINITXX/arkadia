@@ -4,6 +4,7 @@ use serde::Deserialize;
 pub enum Entry {
     User,
     AssistantPartial,
+    AssistantContinuing,
     AssistantComplete,
     ToolUse { name: String },
     ToolResult,
@@ -38,6 +39,9 @@ pub fn parse_line(line: &str) -> Option<ParsedLine> {
             let stop_reason = raw.message.as_ref().and_then(|m| m.stop_reason.as_ref());
             match stop_reason {
                 Some(serde_json::Value::Null) | None => Entry::AssistantPartial,
+                Some(serde_json::Value::String(s)) if s == "tool_use" => {
+                    Entry::AssistantContinuing
+                }
                 Some(_) => Entry::AssistantComplete,
             }
         }
@@ -66,6 +70,12 @@ mod tests {
     fn parses_assistant_complete() {
         let line = r#"{"type":"assistant","message":{"role":"assistant","stop_reason":"end_turn","content":""}}"#;
         assert_eq!(parse_line(line).unwrap().entry, Entry::AssistantComplete);
+    }
+
+    #[test]
+    fn parses_assistant_tool_use_stop_as_continuing() {
+        let line = r#"{"type":"assistant","message":{"role":"assistant","stop_reason":"tool_use","content":""}}"#;
+        assert_eq!(parse_line(line).unwrap().entry, Entry::AssistantContinuing);
     }
 
     #[test]
