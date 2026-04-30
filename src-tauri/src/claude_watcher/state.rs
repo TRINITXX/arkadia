@@ -51,7 +51,8 @@ impl StateMachine {
             Entry::AssistantComplete => AgentState::Waiting {
                 session_id: self.session_id.clone(),
             },
-            Entry::ToolResult | Entry::Other => self.current.clone(),
+            Entry::ToolResult => AgentState::Busy { tool: None },
+            Entry::Other => self.current.clone(),
         };
         self.current.clone()
     }
@@ -155,6 +156,20 @@ mod tests {
         sm.observe(Entry::AssistantComplete, start);
         let s = sm.tick(start + Duration::from_secs(1801));
         assert!(matches!(s, AgentState::Idle { .. }));
+    }
+
+    #[test]
+    fn tool_result_after_waiting_returns_to_busy() {
+        let mut sm = StateMachine::new("sess1".into(), t0());
+        sm.observe(
+            Entry::ToolUse {
+                name: "AskUserQuestion".into(),
+            },
+            t0(),
+        );
+        // user répond → tool_result arrive
+        let s = sm.observe(Entry::ToolResult, t0());
+        assert!(matches!(s, AgentState::Busy { .. }));
     }
 
     #[test]
