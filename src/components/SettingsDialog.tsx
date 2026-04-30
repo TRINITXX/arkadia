@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { newButtonId } from "@/store";
 import { customAsPalette, PALETTES } from "@/lib/palettes";
 import type {
@@ -29,7 +30,7 @@ interface SettingsDialogProps {
   onChangeEditorProtocol: (next: EditorProtocol) => void;
 }
 
-type Tab = "toolbar" | "general";
+type Tab = "toolbar" | "general" | "sessions";
 
 export function SettingsDialog({
   open,
@@ -86,6 +87,12 @@ export function SettingsDialog({
             >
               General
             </SettingsNavItem>
+            <SettingsNavItem
+              active={tab === "sessions"}
+              onClick={() => setTab("sessions")}
+            >
+              Sessions
+            </SettingsNavItem>
           </nav>
 
           <div className="flex-1 overflow-y-auto p-5">
@@ -109,6 +116,7 @@ export function SettingsDialog({
                 onChangeEditorProtocol={onChangeEditorProtocol}
               />
             )}
+            {tab === "sessions" && <SessionsSettings />}
           </div>
         </div>
       </div>
@@ -869,6 +877,51 @@ function GeneralSettings({
             );
           })}
         </div>
+      </section>
+    </div>
+  );
+}
+
+function SessionsSettings() {
+  const [status, setStatus] = useState<"idle" | "clearing" | "cleared">("idle");
+
+  const onClear = async () => {
+    setStatus("clearing");
+    try {
+      await invoke("session_clear");
+      setStatus("cleared");
+      setTimeout(() => setStatus("idle"), 2000);
+    } catch {
+      setStatus("idle");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <h3 className="text-sm font-semibold tracking-tight">Sessions</h3>
+
+      <section>
+        <h4 className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+          Persistance
+        </h4>
+        <p className="mb-3 text-[11px] text-zinc-500">
+          La session courante (projets, onglets, splits, cwd) est sauvegardée
+          automatiquement toutes les 30 secondes et restaurée au démarrage. Pour
+          les panes Claude Code détectés en idle/waiting, la commande `ccd
+          --resume &lt;session_id&gt;` est rejouée à la restauration.
+        </p>
+        <button
+          onClick={onClear}
+          disabled={status === "clearing"}
+          className="rounded border border-red-900/60 bg-red-950/40 px-3 py-1.5 text-xs text-red-300 hover:bg-red-950/70 disabled:opacity-50"
+          type="button"
+        >
+          {status === "clearing"
+            ? "Effacement…"
+            : status === "cleared"
+              ? "Session effacée"
+              : "Effacer la session sauvegardée"}
+        </button>
       </section>
     </div>
   );

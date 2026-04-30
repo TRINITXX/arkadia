@@ -34,6 +34,7 @@ import {
   type EditorProtocol,
   type PaletteId,
   type PaneState,
+  type PaneTree,
   type Project,
   type RenderPayload,
   type SplitDirection,
@@ -41,6 +42,12 @@ import {
   type TerminalFont,
   type ToolbarButton,
 } from "@/types";
+import type {
+  AgentResume,
+  PaneTreeSerialized,
+  SessionFile,
+  TabSession,
+} from "@/lib/sessionTypes";
 
 const COLS = 120;
 const ROWS = 30;
@@ -50,6 +57,37 @@ let tabCounter = 0;
 function newTabId() {
   tabCounter += 1;
   return `tab-${tabCounter}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function serializeTree(
+  tree: PaneTree,
+  panes: Record<string, PaneState>,
+  agentResumes: Record<string, AgentResume>,
+): PaneTreeSerialized {
+  if (tree.kind === "leaf") {
+    const pane = panes[tree.paneId];
+    return {
+      kind: "leaf",
+      pane_id: tree.paneId,
+      cwd: pane?.cwd ?? "",
+      profile_id: "powershell-7",
+      agent_resume: agentResumes[tree.paneId] ?? null,
+    };
+  }
+  return {
+    kind: "split",
+    orientation: tree.direction,
+    ratio: tree.ratio,
+    left: serializeTree(tree.first, panes, agentResumes),
+    right: serializeTree(tree.second, panes, agentResumes),
+  };
+}
+
+function collectLeaves(
+  tree: PaneTreeSerialized,
+): Array<Extract<PaneTreeSerialized, { kind: "leaf" }>> {
+  if (tree.kind === "leaf") return [tree];
+  return [...collectLeaves(tree.left), ...collectLeaves(tree.right)];
 }
 
 interface ProjectMenuState {
@@ -102,6 +140,7 @@ export function App() {
   const [paneMenu, setPaneMenu] = useState<PaneMenuState | null>(null);
   const [renameTarget, setRenameTarget] = useState<Project | null>(null);
   const [colorTarget, setColorTarget] = useState<Project | null>(null);
+  const [sessionRestored, setSessionRestored] = useState(false);
 
   // paneId (= backend session_id) → tabId for fast routing of render/closed events.
   const paneToTab = useRef<Map<string, string>>(new Map());
@@ -175,6 +214,106 @@ export function App() {
     customPalette,
     editorProtocol,
   ]);
+
+  // ─── Session restore on boot ────────────────────────────────────
+
+  useEffect(() => {
+    if (!loaded || sessionRestored) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const session = await invoke<SessionFile | null>("session_load");
+        if (cancelled) return;
+        if (!session || session.version !== 1) return;
+        for (const ps of session.projects) {
+          for (const ts of ps.tabs) {
+            const leaves = collectLeaves(ts.pane_tree);
+            // Map old pane_id → new pane_id (spawn returns a fresh UUID).
+            const idMap: Record<string, string> = {};
+            for (const leaf of leaves) {
+              const initCmd = leaf.agent_resume
+                ? `${leaf.agent_resume.command} ${leaf.agent_resume.session_id}`
+                : null;
+              const cwd = leaf.cwd || ".";
+              try {
+                const newPaneId = await invoke<string>("spawn_terminal", {
+                  cwd,
+                  cols: COLS,
+                  rows: ROWS,
+                  initCommand: initCmd,
+                });
+                idMap[leaf.pane_id] = newPaneId;
+              } catch {
+                /* skip on error */
+              }
+            }
+            // Rebuild the PaneTree using new IDs, dropping leaves that failed
+            // to spawn (collapse splits with a single surviving child).
+            const remap = (t: PaneTreeSerialized): PaneTree | null => {
+              if (t.kind === "leaf") {
+                const newId = idMap[t.pane_id];
+                return newId ? { kind: "leaf", paneId: newId } : null;
+              }
+              const a = remap(t.left);
+              const b = remap(t.right);
+              if (!a) return b;
+              if (!b) return a;
+              return {
+                kind: "split",
+                direction: t.orientation,
+                ratio: t.ratio,
+                first: a,
+                second: b,
+              };
+            };
+            const tree = remap(ts.pane_tree);
+            if (!tree) continue;
+            const remappedLeaves = leaves
+              .map((l) => idMap[l.pane_id])
+              .filter((id): id is string => Boolean(id));
+            const activePaneId = idMap[ts.active_pane_id] ?? remappedLeaves[0];
+            if (!activePaneId) continue;
+            const panes: Record<string, PaneState> = {};
+            for (const leaf of leaves) {
+              const newId = idMap[leaf.pane_id];
+              if (!newId) continue;
+              panes[newId] = {
+                id: newId,
+                title: ts.title,
+                cwd: leaf.cwd || null,
+                screen: null,
+              };
+              paneToTab.current.set(newId, ts.tab_id);
+            }
+            const tab: Tab = {
+              id: ts.tab_id,
+              projectId: ps.project_id,
+              tree,
+              activePaneId,
+              panes,
+            };
+            if (cancelled) return;
+            setTabs((prev) => [...prev, tab]);
+          }
+          if (ps.active_tab_id) {
+            setActiveTabIdByProject((prev) => ({
+              ...prev,
+              [ps.project_id]: ps.active_tab_id!,
+            }));
+          }
+        }
+        if (session.active_project_id) {
+          setActiveProjectId(session.active_project_id);
+        }
+      } finally {
+        if (!cancelled) setSessionRestored(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   // ─── Pane / tab spawning ────────────────────────────────────────
 
@@ -483,6 +622,7 @@ export function App() {
   // ─── Auto-spawn first tab when activating an empty project ────
 
   useEffect(() => {
+    if (!sessionRestored) return;
     if (!activeProject) return;
     const hasTab = tabs.some((t) => t.projectId === activeProject.id);
     if (!hasTab) {
@@ -496,7 +636,7 @@ export function App() {
         }));
       }
     }
-  }, [activeProject, tabs, activeTabIdByProject, spawnTabFor]);
+  }, [sessionRestored, activeProject, tabs, activeTabIdByProject, spawnTabFor]);
 
   // Cleanup all sessions on unmount (HMR / app close)
   useEffect(() => {
@@ -507,6 +647,60 @@ export function App() {
       paneToTab.current.clear();
     };
   }, []);
+
+  // ─── Session auto-save (30s + on unload) ───────────────────────
+
+  useEffect(() => {
+    if (!loaded || !sessionRestored) return;
+    const buildSession = (): SessionFile => {
+      const agentResumes: Record<string, AgentResume> = {};
+      for (const [paneId, st] of Object.entries(paneAgentStates)) {
+        if (st.kind === "idle" || st.kind === "waiting") {
+          agentResumes[paneId] = {
+            kind: "claude-code",
+            session_id: st.session_id,
+            command: "ccd --resume",
+          };
+        }
+      }
+      return {
+        version: 1,
+        saved_at: new Date().toISOString(),
+        active_project_id: activeProjectId,
+        projects: projects.map((p) => ({
+          project_id: p.id,
+          active_tab_id: activeTabIdByProject[p.id] ?? null,
+          tabs: tabs
+            .filter((t) => t.projectId === p.id)
+            .map<TabSession>((t) => ({
+              tab_id: t.id,
+              title: t.panes[t.activePaneId]?.title ?? "",
+              active_pane_id: t.activePaneId,
+              pane_tree: serializeTree(t.tree, t.panes, agentResumes),
+            })),
+        })),
+      };
+    };
+    const interval = setInterval(() => {
+      void invoke("session_save", { session: buildSession() }).catch(() => {});
+    }, 30_000);
+    const onBeforeUnload = () => {
+      void invoke("session_save", { session: buildSession() });
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("beforeunload", onBeforeUnload);
+    };
+  }, [
+    loaded,
+    sessionRestored,
+    projects,
+    tabs,
+    activeProjectId,
+    activeTabIdByProject,
+    paneAgentStates,
+  ]);
 
   // Ctrl+T new tab
   useEffect(() => {
