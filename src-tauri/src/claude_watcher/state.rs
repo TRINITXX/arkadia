@@ -10,10 +10,12 @@ pub enum AgentState {
     Waiting { session_id: String },
 }
 
-const WAITING_TO_IDLE: Duration = Duration::from_secs(60);
+const WAITING_TO_IDLE: Duration = Duration::from_secs(1800);
 const STREAMING_BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 const TOOL_BUSY_TIMEOUT: Duration = Duration::from_secs(30);
 const CONTINUING_BUSY_TIMEOUT: Duration = Duration::from_secs(60);
+
+const INTERACTIVE_TOOLS: &[&str] = &["AskUserQuestion"];
 
 #[derive(Debug, Clone)]
 pub struct StateMachine {
@@ -38,6 +40,11 @@ impl StateMachine {
         self.last_event_at = now;
         self.current = match entry {
             Entry::User => AgentState::Busy { tool: None },
+            Entry::ToolUse { name } if INTERACTIVE_TOOLS.contains(&name.as_str()) => {
+                AgentState::Waiting {
+                    session_id: self.session_id.clone(),
+                }
+            }
             Entry::ToolUse { name } => AgentState::Busy { tool: Some(name) },
             Entry::AssistantPartial => AgentState::Busy { tool: None },
             Entry::AssistantContinuing => AgentState::Busy { tool: None },
@@ -142,12 +149,25 @@ mod tests {
     }
 
     #[test]
-    fn waiting_falls_to_idle_after_60s() {
+    fn waiting_falls_to_idle_after_30min() {
         let start = t0();
         let mut sm = StateMachine::new("sess1".into(), start);
         sm.observe(Entry::AssistantComplete, start);
-        let s = sm.tick(start + Duration::from_secs(61));
+        let s = sm.tick(start + Duration::from_secs(1801));
         assert!(matches!(s, AgentState::Idle { .. }));
+    }
+
+    #[test]
+    fn ask_user_question_tool_triggers_waiting() {
+        let mut sm = StateMachine::new("sess1".into(), t0());
+        sm.observe(Entry::AssistantContinuing, t0());
+        let s = sm.observe(
+            Entry::ToolUse {
+                name: "AskUserQuestion".into(),
+            },
+            t0(),
+        );
+        assert!(matches!(s, AgentState::Waiting { .. }));
     }
 
     #[test]

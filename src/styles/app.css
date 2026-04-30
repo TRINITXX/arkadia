@@ -18,3 +18,19 @@ body,
     sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+@keyframes agent-badge-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+  }
+  60% {
+    box-shadow: 0 0 0 7px rgba(245, 158, 11, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+  }
+}
+
+.agent-badge-busy {
+  animation: agent-badge-pulse 1.4s ease-out infinite;
+}
