@@ -39,28 +39,37 @@ export function PaneTreeView({
   if (tree.kind === "leaf") {
     const pane = panes[tree.paneId];
     if (!pane) return null;
-    if (useWebGPU) {
-      return (
-        <TerminalWebGPU
-          pane={pane}
-          isActive={pane.id === activePaneId}
-          font={font}
-          palette={palette}
-          editorProtocol={editorProtocol}
-          onActivate={() => onActivate(pane.id)}
-          onContextMenu={(x, y) => onContextMenu(pane.id, x, y)}
-        />
-      );
-    }
-    return (
+    const isActive = pane.id === activePaneId;
+    const terminal = useWebGPU ? (
+      <TerminalWebGPU
+        pane={pane}
+        isActive={isActive}
+        font={font}
+        palette={palette}
+        editorProtocol={editorProtocol}
+        onActivate={() => onActivate(pane.id)}
+        onContextMenu={(x, y) => onContextMenu(pane.id, x, y)}
+      />
+    ) : (
       <Terminal
         pane={pane}
-        isActive={pane.id === activePaneId}
+        isActive={isActive}
         font={font}
         palette={palette}
         onActivate={() => onActivate(pane.id)}
         onContextMenu={(x, y) => onContextMenu(pane.id, x, y)}
       />
+    );
+    return (
+      <div className="relative h-full w-full">
+        {terminal}
+        {isActive && (
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{ boxShadow: "inset 0 0 0 1.5px rgba(59,130,246,0.55)" }}
+          />
+        )}
+      </div>
     );
   }
 
