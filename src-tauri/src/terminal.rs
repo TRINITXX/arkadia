@@ -13,6 +13,7 @@ use uuid::Uuid;
 
 use termwiz::color::ColorAttribute;
 
+use crate::agent_registry::AgentRegistry;
 use crate::terminal_state::{
     encode_mouse, MouseEncoding, MouseProtocol, SearchHit, TerminalCell, TerminalState,
 };
@@ -231,6 +232,7 @@ pub fn spawn_terminal(
     cols: u16,
     rows: u16,
     state: State<'_, SessionMap>,
+    registry: State<'_, Arc<AgentRegistry>>,
     app: AppHandle,
 ) -> Result<String, String> {
     let session_id = Uuid::new_v4().to_string();
@@ -284,6 +286,8 @@ pub fn spawn_terminal(
     let reader_scroll = scroll_offset.clone();
     let reader_session_id = session_id.clone();
     let reader_app = app.clone();
+    let reader_registry: Arc<AgentRegistry> = (*registry).clone();
+    let reader_pane_uuid = Uuid::parse_str(&session_id).unwrap_or_else(|_| Uuid::nil());
     thread::spawn(move || {
         let mut buf = [0u8; 8192];
         let mut osc_parser = OscParser::new();
@@ -296,6 +300,7 @@ pub fn spawn_terminal(
                     reader_term.lock().advance_bytes(chunk);
                     let parsed = osc_parser.feed(chunk);
                     for cwd in parsed.cwds {
+                        reader_registry.observe_pane_cwd(reader_pane_uuid, cwd.clone());
                         let _ = reader_app.emit(
                             "terminal-cwd",
                             CwdPayload {
@@ -628,8 +633,12 @@ pub fn resize_terminal(
 pub fn close_terminal(
     session_id: String,
     state: State<'_, SessionMap>,
+    registry: State<'_, Arc<AgentRegistry>>,
 ) -> Result<(), String> {
     state.sessions.lock().remove(&session_id);
+    if let Ok(uuid) = Uuid::parse_str(&session_id) {
+        registry.forget_pane(uuid);
+    }
     Ok(())
 }
 
