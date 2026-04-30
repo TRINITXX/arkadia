@@ -21,6 +21,7 @@ import {
   updateTreeRatio,
 } from "@/lib/paneTree";
 import { DEFAULT_CUSTOM_PALETTE, resolveActivePalette } from "@/lib/palettes";
+import type { AgentEventPayload, AgentStateValue } from "@/lib/agentState";
 import {
   DEFAULT_EDITOR_PROTOCOL,
   DEFAULT_PALETTE_ID,
@@ -89,6 +90,13 @@ export function App() {
   >({});
   /** tabIds that have a pending bell. Cleared when the tab is activated. */
   const [bellTabs, setBellTabs] = useState<Record<string, true>>({});
+  /** paneId → current agent state, mirrored from the backend watcher via cwd.
+   *  Consumed by T8 (Sidepanel badge) and T9 (TabBar badge). */
+  const [paneAgentStates, setPaneAgentStates] = useState<
+    Record<string, AgentStateValue>
+  >({});
+  // T8/T9 will read paneAgentStates; keep the binding referenced until then.
+  void paneAgentStates;
   const [error, setError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -355,6 +363,7 @@ export function App() {
     let unlistenClosed: UnlistenFn | undefined;
     let unlistenCwd: UnlistenFn | undefined;
     let unlistenBell: UnlistenFn | undefined;
+    let unlistenAgent: UnlistenFn | undefined;
     let active = true;
 
     async function setup() {
@@ -395,7 +404,7 @@ export function App() {
           void closePane(tabId, paneId);
         },
       );
-      unlistenCwd = await listen<CwdPayload>("terminal-cwd", (event) => {
+      unlistenCwd = await listen<CwdPayload>("terminal-cwd", async (event) => {
         if (!active) return;
         const paneId = event.payload.session_id;
         const tabId = paneToTab.current.get(paneId);
@@ -414,6 +423,17 @@ export function App() {
             };
           }),
         );
+        // Refresh agent state from the registry — the watcher may already have a
+        // session at this cwd from before this pane reported its cwd.
+        try {
+          const fresh = await invoke<AgentStateValue>("agent_state_for_pane", {
+            paneId,
+          });
+          if (!active) return;
+          setPaneAgentStates((prev) => ({ ...prev, [paneId]: fresh }));
+        } catch {
+          /* ignore */
+        }
       });
       unlistenBell = await listen<BellPayload>("terminal-bell", (event) => {
         if (!active) return;
@@ -424,6 +444,31 @@ export function App() {
           prev[tabId] ? prev : { ...prev, [tabId]: true },
         );
       });
+      unlistenAgent = await listen<AgentEventPayload>(
+        "agent-state-changed",
+        (event) => {
+          if (!active) return;
+          const { cwd, state } = event.payload;
+          // Find all panes whose live cwd matches this event's cwd, update their
+          // states. We read tabs through setTabs's updater to avoid stale closures.
+          setTabs((currentTabs) => {
+            const matchingPaneIds: string[] = [];
+            for (const tab of currentTabs) {
+              for (const paneId of Object.keys(tab.panes)) {
+                const pane = tab.panes[paneId];
+                if (pane.cwd === cwd) matchingPaneIds.push(paneId);
+              }
+            }
+            if (matchingPaneIds.length === 0) return currentTabs;
+            setPaneAgentStates((prev) => {
+              const next = { ...prev };
+              for (const id of matchingPaneIds) next[id] = state;
+              return next;
+            });
+            return currentTabs;
+          });
+        },
+      );
     }
     setup();
 
@@ -433,6 +478,7 @@ export function App() {
       unlistenClosed?.();
       unlistenCwd?.();
       unlistenBell?.();
+      unlistenAgent?.();
     };
   }, [closePane]);
 
