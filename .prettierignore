@@ -1,0 +1,5 @@
+dist
+node_modules
+src-tauri/target
+crates/terminal-renderer/pkg
+*.md
