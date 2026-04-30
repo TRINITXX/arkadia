@@ -12,7 +12,9 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { shortenPath } from "@/store";
-import type { Project } from "@/types";
+import { aggregate, type AgentStateValue } from "@/lib/agentState";
+import type { Project, Tab } from "@/types";
+import { AgentBadge } from "./AgentBadge";
 
 interface SidepanelProps {
   projects: Project[];
@@ -21,6 +23,23 @@ interface SidepanelProps {
   onAdd: () => void;
   onContextMenu: (project: Project, x: number, y: number) => void;
   onReorder: (oldIndex: number, newIndex: number) => void;
+  tabs: Tab[];
+  paneAgentStates: Record<string, AgentStateValue>;
+}
+
+function projectAgentState(
+  projectId: string,
+  tabs: Tab[],
+  paneAgentStates: Record<string, AgentStateValue>,
+): AgentStateValue {
+  const states: AgentStateValue[] = [];
+  for (const tab of tabs) {
+    if (tab.projectId !== projectId) continue;
+    for (const paneId of Object.keys(tab.panes)) {
+      states.push(paneAgentStates[paneId] ?? { kind: "none" });
+    }
+  }
+  return aggregate(states);
 }
 
 export function Sidepanel({
@@ -30,6 +49,8 @@ export function Sidepanel({
   onAdd,
   onContextMenu,
   onReorder,
+  tabs,
+  paneAgentStates,
 }: SidepanelProps) {
   const sortedProjects = [...projects].sort((a, b) => a.order - b.order);
 
@@ -68,6 +89,7 @@ export function Sidepanel({
                   active={p.id === activeProjectId}
                   onActivate={onActivate}
                   onContextMenu={onContextMenu}
+                  agentState={projectAgentState(p.id, tabs, paneAgentStates)}
                 />
               ))}
             </SortableContext>
@@ -89,6 +111,7 @@ interface SortableProjectRowProps {
   active: boolean;
   onActivate: (id: string) => void;
   onContextMenu: (project: Project, x: number, y: number) => void;
+  agentState: AgentStateValue;
 }
 
 function SortableProjectRow({
@@ -96,6 +119,7 @@ function SortableProjectRow({
   active,
   onActivate,
   onContextMenu,
+  agentState,
 }: SortableProjectRowProps) {
   const {
     attributes,
@@ -128,10 +152,13 @@ function SortableProjectRow({
       }`}
       title={project.path}
     >
-      <span
-        className="mt-1.5 size-2.5 shrink-0 rounded-full"
-        style={{ backgroundColor: project.color }}
-      />
+      <span className="relative mt-1.5 size-2.5 shrink-0">
+        <span
+          className="block size-full rounded-full"
+          style={{ backgroundColor: project.color }}
+        />
+        <AgentBadge state={agentState} size={8} />
+      </span>
       <div className="min-w-0 flex-1">
         <div className="truncate text-sm">{project.name}</div>
         <div className="truncate font-mono text-[10px] text-zinc-500">

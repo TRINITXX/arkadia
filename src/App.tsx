@@ -95,8 +95,6 @@ export function App() {
   const [paneAgentStates, setPaneAgentStates] = useState<
     Record<string, AgentStateValue>
   >({});
-  // T8/T9 will read paneAgentStates; keep the binding referenced until then.
-  void paneAgentStates;
   const [error, setError] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -646,6 +644,8 @@ export function App() {
         onAdd={() => setAddOpen(true)}
         onContextMenu={(project, x, y) => setProjectMenu({ project, x, y })}
         onReorder={onReorderProjects}
+        tabs={tabs}
+        paneAgentStates={paneAgentStates}
       />
 
       <div className="flex flex-1 flex-col overflow-hidden">
