@@ -296,8 +296,9 @@ function WorkspaceSection({
   tabs,
   paneAgentStates,
 }: WorkspaceSectionProps) {
+  const isGrouped = !!workspace;
   return (
-    <div className="mb-1.5">
+    <div className="mb-2">
       {workspace && (
         <DraggableWorkspaceHeader
           workspace={workspace}
@@ -311,6 +312,7 @@ function WorkspaceSection({
         <DroppableGroup
           workspaceId={workspaceId}
           hasProjects={projects.length > 0}
+          bordered={isGrouped}
         >
           {projects.map((p) => (
             <DraggableProjectRow
@@ -374,33 +376,31 @@ function DraggableWorkspaceHeader({
       ref={setRef}
       {...attributes}
       {...listeners}
+      onClick={() => onToggle?.()}
       onContextMenu={(e) => {
         e.preventDefault();
         onContextMenu(workspace, e.clientX, e.clientY);
       }}
-      className={`mx-1.5 flex cursor-pointer select-none items-center gap-1 rounded px-1.5 py-1 text-[11px] uppercase tracking-wider text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200 ${
-        isOver ? "bg-zinc-800/80 ring-1 ring-zinc-700" : ""
-      } ${isDragging ? "opacity-40" : ""}`}
+      className={`mx-1.5 flex cursor-pointer select-none items-center gap-2 rounded border border-zinc-800 bg-zinc-900/40 px-2 py-2 text-xs uppercase tracking-wider text-zinc-300 hover:bg-zinc-900 hover:text-zinc-100 ${
+        isOver ? "ring-1 ring-zinc-600 bg-zinc-800/80" : ""
+      } ${isDragging ? "opacity-40" : ""} ${
+        collapsed ? "" : "rounded-b-none border-b-0"
+      }`}
     >
-      <button
-        onPointerDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.stopPropagation();
-          onToggle?.();
-        }}
-        className="flex h-4 w-4 shrink-0 items-center justify-center rounded hover:bg-zinc-800"
-        aria-label={collapsed ? "Expand workspace" : "Collapse workspace"}
+      <span
+        className="flex h-4 w-4 shrink-0 items-center justify-center text-zinc-400"
+        aria-hidden="true"
       >
         {collapsed ? (
-          <ChevronRight size={12} strokeWidth={1.8} />
+          <ChevronRight size={14} strokeWidth={2} />
         ) : (
-          <ChevronDown size={12} strokeWidth={1.8} />
+          <ChevronDown size={14} strokeWidth={2} />
         )}
-      </button>
-      <span className="min-w-0 flex-1 truncate font-medium">
+      </span>
+      <span className="min-w-0 flex-1 truncate font-semibold">
         {workspace.name}
       </span>
-      <AgentBadge state={agentState} size={6} inline />
+      <AgentBadge state={agentState} size={7} inline />
     </div>
   );
 }
@@ -408,12 +408,14 @@ function DraggableWorkspaceHeader({
 interface DroppableGroupProps {
   workspaceId: string | null;
   hasProjects: boolean;
+  bordered: boolean;
   children: React.ReactNode;
 }
 
 function DroppableGroup({
   workspaceId,
   hasProjects,
+  bordered,
   children,
 }: DroppableGroupProps) {
   const dropData: WorkspaceDropData = {
@@ -428,7 +430,11 @@ function DroppableGroup({
   return (
     <div
       ref={setNodeRef}
-      className={`min-h-[6px] rounded ${
+      className={`min-h-[6px] ${
+        bordered
+          ? "mx-1.5 rounded-b border border-t-0 border-zinc-800 bg-zinc-950/50 pt-1 pb-1.5"
+          : ""
+      } ${
         isOver && !hasProjects
           ? "bg-zinc-900/60 outline-dashed outline-1 outline-zinc-700"
           : ""
@@ -437,9 +443,9 @@ function DroppableGroup({
       {children}
       {!hasProjects && (
         <div
-          className={`mx-1.5 my-0.5 px-2 py-1 text-[10px] italic text-zinc-600 ${
-            isOver ? "text-zinc-400" : ""
-          }`}
+          className={`my-0.5 px-2 py-1 text-[10px] italic text-zinc-600 ${
+            bordered ? "mx-1.5" : "mx-1.5"
+          } ${isOver ? "text-zinc-400" : ""}`}
         >
           (drop a project here)
         </div>
